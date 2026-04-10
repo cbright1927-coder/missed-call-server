@@ -6,8 +6,8 @@ app.use(express.urlencoded({ extended: false }));
 
 // -----------------------------------------------
 // PASTE YOUR TWILIO CREDENTIALS HERE
-const TWILIO_SID   = 'process.env.TWILIO_SID';
-const TWILIO_TOKEN = 'process.env.TWILIO_TOKEN';
+const TWILIO_SID   = process.env.TWILIO_SID;
+const TWILIO_TOKEN = process.env.TWILIO_TOKEN;
 // -----------------------------------------------
 
 const client = twilio(TWILIO_SID, TWILIO_TOKEN);
