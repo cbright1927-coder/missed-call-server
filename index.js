@@ -38,7 +38,6 @@ let CLIENTS = [
 app.post('/call', (req, res) => {
   const toNumber = req.body.To;
   const fromNumber = req.body.From;
-
   const match = CLIENTS.find(c => c.twilioNumber === toNumber && c.active);
   if (!match) {
     console.log('Unknown or inactive number:', toNumber);
@@ -46,16 +45,46 @@ app.post('/call', (req, res) => {
     res.send('<Response></Response>');
     return;
   }
-
   console.log('Missed call for', match.name, 'from', fromNumber);
-
   twilioClient.messages.create({
     body: match.message,
     from: toNumber,
     to: fromNumber
   }).then(msg => console.log('SMS sent:', msg.sid))
     .catch(err => console.error('SMS error:', err.message));
+  res.set('Content-Type', 'text/xml');
+  res.send('<Response></Response>');
+});
 
+app.post('/sms', (req, res) => {
+  const toNumber = req.body.To;
+  const fromNumber = req.body.From;
+  const body = (req.body.Body || '').trim().toUpperCase();
+  const match = CLIENTS.find(c => c.twilioNumber === toNumber && c.active);
+  if (!match) {
+    res.set('Content-Type', 'text/xml');
+    res.send('<Response></Response>');
+    return;
+  }
+  if (body === 'CHANGE') {
+    match.awaitingChange = true;
+    twilioClient.messages.create({
+      body: `Hi! What would you like your new auto-reply message to say? Just reply with your new message and we will update it straight away 😊`,
+      from: toNumber,
+      to: fromNumber
+    }).catch(err => console.error('SMS error:', err.message));
+  } else if (match.awaitingChange) {
+    const oldMessage = match.message;
+    match.message = req.body.Body.trim();
+    match.awaitingChange = false;
+    twilioClient.messages.create({
+      body: `Perfect! Your auto-reply message has been updated to: "${match.message}" 🎉`,
+      from: toNumber,
+      to: fromNumber
+    }).catch(err => console.error('SMS error:', err.message));
+    sendTelegram(`✏️ <b>Client updated message — ${match.name}</b>\nOld: ${oldMessage}\nNew: ${match.message}`);
+    console.log('Message updated for', match.name);
+  }
   res.set('Content-Type', 'text/xml');
   res.send('<Response></Response>');
 });
@@ -85,6 +114,18 @@ app.post('/add-client', (req, res) => {
   res.json({ success: true, action: 'added' });
 });
 
+app.post('/update-message', (req, res) => {
+  const { twilioNumber, message } = req.body;
+  const client = CLIENTS.find(c => c.twilioNumber === twilioNumber);
+  if (!client) return res.json({ success: false, error: 'Client not found' });
+  client.message = message;
+  sendTelegram(`✏️ <b>Message updated — ${client.name}</b>\nNew message: ${message}`);
+  res.json({ success: true });
+});
+
+app.get('/clients-full', (req, res) => {
+  res.json({ clients: CLIENTS });
+});
 app.post('/cancel-client', (req, res) => {
   const { phone, twilioNumber } = req.body;
   const identifier = twilioNumber || phone;
